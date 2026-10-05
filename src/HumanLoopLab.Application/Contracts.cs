@@ -49,6 +49,8 @@ public sealed class WorkflowException(string code, string message, int statusCod
     public int StatusCode { get; } = statusCode;
 }
 
+// Keeps two requests from both passing the idempotency check before either one records a key.
+// It only covers this process.
 public sealed class ExecutionGate
 {
     public SemaphoreSlim Semaphore { get; } = new(1, 1);

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace HumanLoopLab.Infrastructure;
 
+// Local SQLite is the lab's memory. Audit rows are appended and read back in the order they were written.
 public sealed class EfWorkflowStore(LabDbContext db) : IWorkflowStore
 {
     public Task<ActionProposal?> GetProposalAsync(Guid id, CancellationToken cancellationToken) =>

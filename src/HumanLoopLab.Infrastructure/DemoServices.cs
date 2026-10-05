@@ -4,6 +4,8 @@ using Microsoft.Extensions.Configuration;
 
 namespace HumanLoopLab.Infrastructure;
 
+// Six fixed actors. The request header picks one of them.
+// That selection is a demo convenience, not a login.
 public sealed class DemoActorDirectory : IActorDirectory
 {
     private readonly IReadOnlyDictionary<string, Actor> _actors;
@@ -29,6 +31,8 @@ public sealed class DemoActorDirectory : IActorDirectory
     public IReadOnlyCollection<Actor> All => _actors.Values.ToArray();
 }
 
+// The model may suggest a proposal. It does not evaluate policy, approve itself, or touch a tool.
+// Replace this adapter with a real provider without moving those gates.
 public sealed class DeterministicDemoAgent : IAgentModel
 {
     public DemoSuggestion Suggest(string scenario) => (scenario ?? "").Trim().ToLowerInvariant() switch
@@ -41,6 +45,7 @@ public sealed class DeterministicDemoAgent : IAgentModel
     };
 }
 
+// Every result says SIMULATED. The named target is never contacted.
 public sealed class SimulatedActionExecutor : ISimulatedActionExecutor
 {
     public Task<string> ExecuteAsync(ActionProposal proposal, CancellationToken cancellationToken)

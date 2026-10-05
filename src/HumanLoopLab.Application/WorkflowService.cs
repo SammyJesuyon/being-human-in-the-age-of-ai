@@ -3,6 +3,9 @@ using HumanLoopLab.Domain;
 
 namespace HumanLoopLab.Application;
 
+// A proposal is an intention, not an action. This is the only place that
+// turns that intention into a recorded decision and, later, a simulated result.
+// The model can suggest work. It cannot choose the policy outcome or approve itself.
 public sealed class WorkflowService(
     IWorkflowStore store,
     PolicyEngine policy,
@@ -20,6 +23,8 @@ public sealed class WorkflowService(
         ValidateText(reason, nameof(reason), 1, 500);
         ValidateText(evidence, nameof(evidence), 0, 2_000);
 
+        // Copy risk and scope from the catalog now. A later catalog edit must not
+        // quietly change what this proposal was asking permission to do.
         var proposal = new ActionProposal
         {
             Id = Guid.NewGuid(),
@@ -50,6 +55,8 @@ public sealed class WorkflowService(
         var proposal = await GetAsync(id, cancellationToken);
         if (proposal.Status != ProposalStatus.Draft)
             throw InvalidState(proposal);
+        // Only the proposer may ask. The caller does not get to pick Allow, Deny,
+        // or RequireHumanApproval. PolicyEngine does.
         if (caller.Id != proposal.ProposerId)
             throw new WorkflowException("permission_denied", "Only the proposer can request evaluation.", 403);
         if (!ActionCatalog.TryGet(proposal.Action, out var definition))
@@ -73,6 +80,8 @@ public sealed class WorkflowService(
                 break;
             case PolicyOutcome.RequireHumanApproval:
                 ProposalStateMachine.Move(proposal, ProposalStatus.PendingApproval);
+                // Bind the request to this action, target, and scope, and let it
+                // expire in thirty minutes. A yes given for something else does not carry over.
                 proposal.Approval = new ApprovalRequest
                 {
                     Id = Guid.NewGuid(), ProposalId = proposal.Id, BoundAction = proposal.Action,
@@ -98,6 +107,8 @@ public sealed class WorkflowService(
         var proposal = await GetAsync(id, cancellationToken);
         if (proposal.Status != ProposalStatus.PendingApproval || proposal.Approval is null)
             throw InvalidState(proposal);
+        // The proposer cannot approve their own proposal, and an agent cannot approve at all.
+        // Recording the decision shows an authority transition. It cannot prove the reviewer understood the action.
         if (!approver.IsHuman || approver.Role is not (Role.Approver or Role.Administrator)
             || !approver.Scopes.Contains("approval:grant") || approver.Id == proposal.ProposerId)
         {
@@ -130,12 +141,15 @@ public sealed class WorkflowService(
         Guid id, Actor caller, string idempotencyKey, CancellationToken cancellationToken)
     {
         ValidateText(idempotencyKey, nameof(idempotencyKey), 1, 100);
+        // One process, one execution at a time. Enough for this lab. Not a distributed lock.
         await gate.Semaphore.WaitAsync(cancellationToken);
         try
         {
             var proposal = await GetAsync(id, cancellationToken);
             if (!caller.Scopes.Contains(proposal.RequiredScope))
                 throw new WorkflowException("permission_denied", "Executor lacks the required scope.", 403);
+            // Same key, same proposal: return the stored result. Same key, different proposal: conflict.
+            // A key left in progress fails closed. I will not start a second attempt.
             var prior = await store.GetIdempotencyAsync(idempotencyKey, cancellationToken);
             if (prior is not null)
             {
@@ -157,6 +171,8 @@ public sealed class WorkflowService(
                 throw new WorkflowException("already_executed", "Use the original idempotency key to retrieve the result.", 409);
             if (proposal.Status is not (ProposalStatus.Evaluated or ProposalStatus.Approved))
                 throw InvalidState(proposal);
+            // Check the recorded decision again. An approval that has expired, or that
+            // no longer matches this action, target, and scope, does not authorize execution.
             if (proposal.PolicyDecision?.Outcome == PolicyOutcome.RequireHumanApproval)
             {
                 var approval = proposal.Approval;
@@ -168,6 +184,8 @@ public sealed class WorkflowService(
             if (proposal.PolicyDecision?.Outcome is null or PolicyOutcome.Deny)
                 throw new WorkflowException("permission_denied", "No allowing policy decision exists.", 403);
 
+            // Write ExecutionStarted before calling the simulator. If we stop between
+            // the two saves, the key stays in progress and a retry will not run twice.
             ProposalStateMachine.Move(proposal, ProposalStatus.Executing);
             var record = new ExecutionRecord
             {
@@ -220,6 +238,8 @@ public sealed class WorkflowService(
 
     public async Task<ResponsibilityTrace> ResponsibilityAsync(Guid id, CancellationToken cancellationToken)
     {
+        // Who proposed, which policy spoke, who approved, and who executed.
+        // This attributes the record. It does not decide moral responsibility.
         var p = await GetAsync(id, cancellationToken);
         return new(p.Id, p.ProposerId, p.RequiredScope, p.PolicyDecision?.PolicyName,
             p.PolicyDecision?.Outcome, "Distinct human Approver or Administrator",

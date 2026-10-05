@@ -9,6 +9,9 @@ public sealed record DelegationCharacteristics(
 
 public sealed record DelegationAdvice(DelegationMode SuggestedMode, IReadOnlyList<string> Reasons);
 
+// An illustrative policy, not a score and not a moral ranking.
+// I stop at the first check that fits: Retain, then Augment, then Periodically Reclaim, then Delegate.
+// The useful question is what this person should still be able to do afterward.
 public sealed class DelegationAdvisor
 {
     public DelegationAdvice Advise(DelegationCharacteristics task)
