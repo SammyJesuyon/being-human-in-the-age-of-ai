@@ -1,0 +1,71 @@
+@base = http://localhost:5080
+# Replace <proposal-id> with the id from a create response. Use a new ID for each branch.
+@proposalId = <proposal-id>
+
+### Catalog and fixed local actors
+GET {{base}}/api/actors
+
+### Create a low-risk proposal (save its ID, then evaluate/execute)
+POST {{base}}/api/proposals
+Content-Type: application/json
+X-Demo-Actor-Id: developer-1
+
+{"action":"ReadLogs","target":"demo-service","reason":"Inspect a simulated service.","evidence":"Local demonstration."}
+
+### Create a high-risk deployment proposal
+POST {{base}}/api/proposals
+Content-Type: application/json
+X-Demo-Actor-Id: agent-1
+
+{"action":"DeployToProduction","target":"demo-production","reason":"Propose a simulated release.","evidence":"Reviewed demo candidate."}
+
+### Or create it through the deterministic agent
+POST {{base}}/api/demo/agent-proposals
+Content-Type: application/json
+X-Demo-Actor-Id: agent-1
+
+{"scenario":"deploy"}
+
+### Evaluate a proposal using its proposer actor
+POST {{base}}/api/proposals/{{proposalId}}/evaluate
+X-Demo-Actor-Id: agent-1
+
+### Approve the pending high-risk proposal as a distinct human
+POST {{base}}/api/proposals/{{proposalId}}/approve
+X-Demo-Actor-Id: approver-1
+
+### Or reject a DIFFERENT pending proposal (rejection is terminal)
+POST {{base}}/api/proposals/{{proposalId}}/reject
+X-Demo-Actor-Id: approver-1
+
+### Execute an approved proposal (simulation only)
+POST {{base}}/api/proposals/{{proposalId}}/execute
+X-Demo-Actor-Id: agent-1
+Idempotency-Key: demo-deploy-001
+
+### Repeat: same key retrieves the previous result without rerunning
+POST {{base}}/api/proposals/{{proposalId}}/execute
+X-Demo-Actor-Id: agent-1
+Idempotency-Key: demo-deploy-001
+
+### Audit and responsibility trace
+GET {{base}}/api/proposals/{{proposalId}}/audit
+
+###
+GET {{base}}/api/proposals/{{proposalId}}/responsibility
+
+### Illustrative delegation advice
+POST {{base}}/api/delegation/advice
+Content-Type: application/json
+
+{"consequence":"Low","reversible":true,"responsibilityCritical":false,"requiresHumanJudgment":false,"auditable":true,"skillMaintenanceImportant":false,"frequent":true,"skillAtrophyRisk":false}
+
+### Seeded scenarios and contextual advice
+GET {{base}}/api/delegation/scenarios
+
+### Agent self-permission change: create this, then evaluate with agent-1; it is DENIED
+POST {{base}}/api/proposals
+Content-Type: application/json
+X-Demo-Actor-Id: agent-1
+
+{"action":"ModifyAccessPolicy","target":"agent-role","reason":"Attempt self-authorization.","evidence":"Demonstration only."}

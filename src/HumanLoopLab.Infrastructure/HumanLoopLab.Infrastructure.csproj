@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../HumanLoopLab.Application/HumanLoopLab.Application.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.30" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.30">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>
